@@ -2,20 +2,12 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <sched.h>
+#include <sys/time.h>
 
 // Simulate different priority levels
 #define LOW_PRIORITY 0
 #define MEDIUM_PRIORITY 1
 #define HIGH_PRIORITY 2
-
-// Function to simulate CPU-intensive work
-void doWork(int iterations) {
-    for (int i = 0; i < iterations; i++) {
-        // Busy wait to simulate CPU work
-        for (volatile long j = 0; j < 10000000; j++);
-    }
-}
 
 // Structure to pass data to threads
 typedef struct {
@@ -24,81 +16,60 @@ typedef struct {
     int workAmount;
 } ThreadData;
 
+// Function to get current time in milliseconds
+long long currentTimeMillis() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000LL) + (tv.tv_usec / 1000);
+}
+
+// Simulated CPU-intensive work
+void doWork(int iterations) {
+    for (int i = 0; i < iterations; i++) {
+        for (volatile long j = 0; j < 10000000; j++);
+    }
+}
+
 // Thread function
 void* threadFunction(void* arg) {
     ThreadData* data = (ThreadData*)arg;
-    
-    // Set thread priority based on data
-    int policy;
-    struct sched_param param;
-    
-    pthread_getschedparam(pthread_self(), &policy, &param);
-    
-    // Map our priorities to POSIX priorities
-    // Note: This is a simulation, as real Windows priorities would use Windows API
-    switch(data->priority) {
-        case HIGH_PRIORITY:
-            param.sched_priority = sched_get_priority_max(policy);
-            break;
-        case MEDIUM_PRIORITY:
-            param.sched_priority = (sched_get_priority_max(policy) + 
-                                   sched_get_priority_min(policy)) / 2;
-            break;
-        case LOW_PRIORITY:
-            param.sched_priority = sched_get_priority_min(policy);
-            break;
-    }
-    
-    pthread_setschedparam(pthread_self(), policy, &param);
-    
-    // Record start time
+
+    long long startTime = currentTimeMillis();
     printf("Thread %d (Priority %d) starting work\n", data->id, data->priority);
-    time_t startTime = time(NULL);
-    
-    // Do the work
+
     doWork(data->workAmount);
-    
-    // Record end time and report
-    time_t endTime = time(NULL);
-    printf("Thread %d (Priority %d) finished after %ld seconds\n", 
-           data->id, data->priority, (endTime - startTime));
-    
+
+    long long endTime = currentTimeMillis();
+    printf("Thread %d (Priority %d) finished after %lld ms\n",
+           data->id, data->priority, endTime - startTime);
+
     return NULL;
 }
 
 int main() {
     pthread_t threads[3];
     ThreadData threadData[3];
-    
-    printf("Starting priority-based scheduling demonstration\n");
-    
-    // Create threads with different priorities and workloads
-    threadData[0].id = 1;
-    threadData[0].priority = LOW_PRIORITY;
-    threadData[0].workAmount = 5;
-    
-    threadData[1].id = 2;
-    threadData[1].priority = MEDIUM_PRIORITY;
-    threadData[1].workAmount = 5;
-    
-    threadData[2].id = 3;
-    threadData[2].priority = HIGH_PRIORITY;
-    threadData[2].workAmount = 5;
-    
-    // Start threads in reverse priority order to demonstrate preemption
-    pthread_create(&threads[0], NULL, threadFunction, &threadData[0]);
-    sleep(1); // Small delay between thread creations
-    
-    pthread_create(&threads[1], NULL, threadFunction, &threadData[1]);
-    sleep(1);
-    
+
+    printf("Simulated priority scheduling demo (no root required)\n");
+
+    // Define thread parameters
+    threadData[0] = (ThreadData){ .id = 1, .priority = LOW_PRIORITY, .workAmount = 5 };
+    threadData[1] = (ThreadData){ .id = 2, .priority = MEDIUM_PRIORITY, .workAmount = 5 };
+    threadData[2] = (ThreadData){ .id = 3, .priority = HIGH_PRIORITY, .workAmount = 5 };
+
+    // Simulate scheduling: High priority starts first
     pthread_create(&threads[2], NULL, threadFunction, &threadData[2]);
-    
-    // Wait for all threads to complete
+    usleep(500000); // 0.5 second delay
+
+    pthread_create(&threads[1], NULL, threadFunction, &threadData[1]);
+    usleep(500000);
+
+    pthread_create(&threads[0], NULL, threadFunction, &threadData[0]);
+
     for (int i = 0; i < 3; i++) {
         pthread_join(threads[i], NULL);
     }
-    
+
     printf("All threads completed\n");
     return 0;
 }
